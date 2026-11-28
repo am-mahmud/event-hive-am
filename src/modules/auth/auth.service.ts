@@ -2,6 +2,7 @@ import { pool } from "../../config/db";
 import bcrypt from "bcryptjs";
 import IUser from "./auth.interface";
 import { passwordHelpers } from "../../utils/passwordHelper";
+import { jwtHelpers } from "../../utils/jwtHelpers";
 
 const register = async (payload: IUser) => {
   const { name, email, password, role } = payload;
@@ -16,20 +17,32 @@ const register = async (payload: IUser) => {
   return result.rows[0];
 };
 
-const login = async (email: string, password:string) =>{
-  const isUserExist = await pool.query<IUser>(`SELECT * FROM user WHERE 
-    email = $1`, [email]);
+const login = async (email: string, password: string) => {
+  const result = await pool.query<IUser>(
+    `SELECT id, name, email, password, role FROM users WHERE email = $1`,
+    [email],
+  );
 
-    const user = isUserExist.rows[0];
+  const user = result.rows[0];
 
-    if(!user || !passwordHelpers.compareHash(password, user.password)) {
-      const error = new Error("Invalid Email")
-      throw Error;
-    }
+  if (!user) {
+    throw new Error("Invalid email or password");
+  }
 
-    // const token = 
+  const isMatch = await passwordHelpers.compareHash(password, user.password);
 
+  if (!isMatch) {
+    throw new Error("Invalid email or password");
+  }
 
-}
+  const token = jwtHelpers.generateToken({
+    id: user.id,
+    role: user.role,
+  });
 
-export const authService = { register };
+  const { password: _password, ...safeUser } = user;
+
+  return { user: safeUser, token };
+};
+
+export const authService = { register, login };
